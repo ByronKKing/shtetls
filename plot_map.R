@@ -75,4 +75,3 @@ baseMap +
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank())
 
-
