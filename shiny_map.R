@@ -9,14 +9,14 @@ df = read.csv("./data/additional_shtetl_data.csv",stringsAsFactors = FALSE)
 
 plotdf1 = df[!(is.na(df$pop1)),]
 
-plotdf1 = plotdf1[plotdf1$name!='Sarnaki',]
+plotdf1 = plotdf1[!(plotdf1$name %in% c('Solec Kujawski','Jozefow Nad Wisla')),]
 
 plotdf1 = plotdf1[order(-plotdf1$pop1),]
 
 
 ui = navbarPage(
   
-  #theme = shinytheme("cosmo"),
+  theme = shinytheme("cosmo"),
   title = "Shtetl Map",
   
   tabPanel("My Listings",
@@ -31,10 +31,13 @@ ui = navbarPage(
              width = 4
            ),
            mainPanel(
-             plotOutput("mapPlot"),
-             plotOutput("scatterPlot")
+             plotlyOutput("mapPlot"),
+             plotlyOutput("scatterPlot")
            )
   )
+  
+  ## Add Data Table Here to view data
+  
   # ,
   # tabPanel("My Progress", 
   #          sidebarPanel(
@@ -64,12 +67,6 @@ server = function(input, output,session) {
   # Initialize selectors not based on reactive dataframe
   
   ##map type
-  output$mapType = renderUI({
-    selectInput("mapType", label = "Select Map Type", 
-                choices = list("Satellite" = "satellite", "Terrain" = "terrain", "Road" = "road","Hybrid" = "hybrid"), 
-                selected = "terrain")
-  })
-
   
   ##pop diff vs pop1
   
@@ -105,45 +102,44 @@ server = function(input, output,session) {
   
   # Plot map
   
-  output$mapPlot = renderPlot({
-    print(input$mapType)
-    baseMap = ggmap(get_map(location=c(mean(plotdf1$google_long),mean(plotdf1$google_lat)), 
-                            scale=2, zoom=6,maptype = "roadmap",
-                    filename = paste("./data/",input$mapType,"_map.png",sep = "")),
-                    extent="normal")
-    print(paste("./data/",input$mapType,"_map.png",sep = ""))
-    circle_scale_amt = .0001
-    geom.text.size = 7
+  output$mapPlot = renderPlotly({
+
+    g = list(
+      scope = 'europe',
+      projection = list(type = 'natural earth',scale = 5),
+      showland = TRUE,
+      landcolor = toRGB("gray85"),
+      subunitwidth = 1,
+      countrywidth = 1,
+      subunitcolor = toRGB("white"),
+      countrycolor = toRGB("white"),
+      center = list(lon=mean(plotdf1$google_long),lat=mean(plotdf1$google_lat))
+    )
     
-    baseMap + 
-      geom_point(aes(x=google_long, y=google_lat), 
-                 data=head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,],input$maxNumb), col="orange", 
-                 alpha=0.4, 
-                 size=ifelse(head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,]$pop1,input$maxNumb)*circle_scale_amt >9,9,
-                             head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,]$pop1,input$maxNumb)*circle_scale_amt)
-      ) +  
-      scale_size_continuous(range=range(head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,]$pop1),input$maxNumb)) +
-      geom_text(data = head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,],input$maxNumb), 
-                aes(x = google_long, y = google_lat, label = name), 
-                size = 3, vjust = 0, hjust = -0.5,  size=geom.text.size) + 
-      theme(axis.title.x=element_blank(),
-            axis.text.x=element_blank(),
-            axis.ticks.x=element_blank(),
-            axis.title.y=element_blank(),
-            axis.text.y=element_blank(),
-            axis.ticks.y=element_blank())
+    p = plot_geo(head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,],input$maxNumb)
+                 ,locationmode = 'country names', sizes = c(1, 250)) %>%
+      add_markers(
+        x = ~google_long, y = ~google_lat, size = ~pop1, color = ~region,
+        hoverinfo = "text",
+        text = ~paste(head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,]$name,input$maxNumb)
+                      ,", Population: ",
+                      head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,]$pop1,input$maxNumb)
+                      ,sep = "")
+      ) %>%
+      layout(title = 'Shtetls in Eastern Europe', geo = g)
     
+    p
+    
+
   })
   
-  output$scatterPlot = renderPlot({
+  output$scatterPlot = renderPlotly({
     
-    ggplot(head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,],input$maxNumb)
-      , aes(x=year1, y=pop1, color=region)) +
-      geom_point() +
-      geom_text(data=head(head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,],input$maxNumb),5),
-                aes(year1,pop1,label=name),hjust=0,vjust=0,
-                check_overlap = TRUE)
     
+    plot_ly(data = head(dfReact()[dfReact()$pop1 <= input$popRange[2] & dfReact()$year1 <= input$yearRange[2] & dfReact()$region %in% input$selectRegion,],input$maxNumb), 
+            x = ~year1, y = ~pop1, color = ~region)
+    
+
   })
   
 }
@@ -151,5 +147,5 @@ server = function(input, output,session) {
 
 shinyApp(ui = ui, server = server)
 
-#dfReact()[dfReact()$pop1 <= input$popRange[2],]
+
 
